@@ -1,0 +1,100 @@
+#!/bin/bash
+# Description: Upload our stuff to master, then sync back changes from master.
+# Stops working after the first error, unless using -c
+
+rsync=/usr/bin/rsync
+LOCK_FILE=/var/tmp/rsync-media.lock
+MASTER=upload.media.ccc.de
+FTPUSER=web012
+FTPGROUP=web012
+
+
+usage () {
+  cat << EOF
+  usage: $0 [-f][-v]
+    -f      force, remove lock file first
+    -v      verbose, direct output to stdout
+EOF
+  exit
+}
+
+
+
+while getopts "fvh" opt; do
+  case "$opt" in 
+    v) VERBOSE=1;;
+    f) rm -f "$LOCK_FILE";;
+    *) usage;;
+  esac
+done
+
+
+# CRON: silent unless VERBOSE
+if [ -z "$VERBOSE" ]; then
+  MAILTO=""
+  exec >/dev/null 2>&1
+fi
+
+
+#check for the lockfile
+if [ -f "$LOCK_FILE" ]; then
+  
+  /usr/bin/logger -t "$(basename $0)[$$]" "Lock file '${LOCK_FILE}' exists. Please check if another rsync is running. Test sync: 'sudo -u media-sync $0 -fv'"
+  exit
+fi
+
+
+# start sync
+echo "create lock file"
+touch "$LOCK_FILE"
+
+
+echo "Starting FTP Sync" | logger -t "ftpsync"
+
+#fix permissions before starting the upload
+chmod -R g+rwX /var/data2/ftp.ccc.de/broadcast/c-radar
+chmod -R o+rX /var/data2/ftp.ccc.de/broadcast/c-radar
+chown -R ${FTPUSER}:${FTPGROUP} /var/data2/ftp.ccc.de/events/mrmcd
+
+
+echo "c-radar FTP Sync" | logger -t "ftpsync"
+
+
+#rsync -e 'ssh -4 -i /root/.ssh/media.ccc.key.id_rsa -p 2222' --del -trlz /var/data2/ftp.ccc.de/broadcast/c-radar/ chaosdarmstadt@${MASTER}:ftp/broadcast/c-radar/ 
+
+echo "mrmcd FTP Sync" | logger -t "ftpsync"
+
+#rsync -e 'ssh -4 -i /root/.ssh/media.ccc.key.id_rsa -p 2222' --del -trlz /var/data2/ftp.ccc.de/events/mrmcd/ chaosdarmstadt@${MASTER}:ftp/events/mrmcd/ 
+
+
+#Backup des alten TREEs
+cp /var/data2/ftp.ccc.de/TREE /var/tmp/ftp_INDEX
+# und download des mirrorcontents
+
+#rsync -e 'ssh -4 -i /root/.ssh/media.ccc.key.id_rsa -p 2222' --exclude ".*" --exclude "lost+found" --exclude INDEX.gz --exclude "events/mrmcd" --exclude "broadcast/c-radar" --del -rltzxaP chaosdarmstadt@${MASTER}:ftp/ /var/data2/ftp.ccc.de/ 
+
+rsync -e 'ssh -4 -i /root/.ssh/media.ccc.key.id_rsa -p 2222' --exclude ".*" --exclude "lost+found" --exclude INDEX.gz --exclude "events/mrmcd" --exclude "broadcast/c-radar" --exclude "NEW" --exclude "INDEX" --exclude "TREE" --del -rltzxaP darm-sync@${MASTER}:/srv/ftp/ /var/data2/ftp.ccc.de/
+
+cd /var/data2/ftp.ccc.de/
+tree --noreport > TREE
+find ./ -type f | sed "s/.\///" | sort > INDEX
+diff /var/tmp/ftp_INDEX  /var/data2/ftp.ccc.de/INDEX -U 0 | grep -Ev '^[+]{3,3}' | grep -Ev '^[-]{3,3}' | grep -Ev '^@@' > NEW
+
+
+echo "Successfull FTP Sync" | logger -t "ftpsync"
+
+#fix file permissions
+
+chown ${FTPUSER}:${FTPGROUP}  -R /var/data2/ftp.ccc.de/
+chmod -R o+rX /var/data2/ftp.ccc.de/
+chmod -R g+rX /var/data2/ftp.ccc.de/
+chown :c-radar -R /var/data2/ftp.ccc.de/broadcast/c-radar
+chmod -R g+rwX /var/data2/ftp.ccc.de/broadcast/c-radar
+chmod -R o+rX /var/data2/ftp.ccc.de/broadcast/c-radar
+
+
+
+# cleanup
+echo "remove lock file"
+rm -f "$LOCK_FILE"
+
