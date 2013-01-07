@@ -2,6 +2,10 @@
 # Description: Upload our stuff to master, then sync back changes from master.
 # Stops working after the first error, unless using -c
 
+# the account to send our files to the ftp master via sftp is chaosdarmstadt
+# the account to receive changes via rsync is darm-sync
+
+
 rsync=/usr/bin/rsync
 LOCK_FILE=/var/tmp/rsync-media.lock
 MASTER=upload.media.ccc.de
@@ -40,6 +44,10 @@ fi
 if [ -f "$LOCK_FILE" ]; then
   
   /usr/bin/logger -t "$(basename $0)[$$]" "Lock file '${LOCK_FILE}' exists. Please check if another rsync is running. Test sync: 'sudo -u media-sync $0 -fv'"
+  echo "${LOCK_FILE}' exists. Please check if another rsync is running."
+  if test `find "$LOCK_FILE" -mmin +120`; then
+	echo "ftp lock is older than 120 minutes. please check" | mail -s "potential ftp error" bios@darmstadt.ccc.d bios@darmstadt.ccc.de
+  fi
   exit
 fi
 
@@ -61,11 +69,13 @@ echo "c-radar FTP Sync" | logger -t "ftpsync"
 
 
 #rsync -e 'ssh -4 -i /root/.ssh/media.ccc.key.id_rsa -p 2222' --del -trlz /var/data2/ftp.ccc.de/broadcast/c-radar/ chaosdarmstadt@${MASTER}:ftp/broadcast/c-radar/ 
+lftp -u chaosdarmstadt,test -p 2222 sftp://upload.media.ccc.de -e "mirror -Rc --delete /var/data2/ftp.ccc.de/broadcast/c-radar/ ftp/broadcast/c-radar/; exit"
+
 
 echo "mrmcd FTP Sync" | logger -t "ftpsync"
 
 #rsync -e 'ssh -4 -i /root/.ssh/media.ccc.key.id_rsa -p 2222' --del -trlz /var/data2/ftp.ccc.de/events/mrmcd/ chaosdarmstadt@${MASTER}:ftp/events/mrmcd/ 
-
+lftp -u chaosdarmstadt,test -p 2222 sftp://upload.media.ccc.de -e "mirror -Rc --delete /var/data2/ftp.ccc.de/events/mrmcd/ ftp/events/mrmcd/; exit"
 
 #Backup des alten TREEs
 cp /var/data2/ftp.ccc.de/TREE /var/tmp/ftp_INDEX
@@ -73,17 +83,32 @@ cp /var/data2/ftp.ccc.de/TREE /var/tmp/ftp_INDEX
 
 #rsync -e 'ssh -4 -i /root/.ssh/media.ccc.key.id_rsa -p 2222' --exclude ".*" --exclude "lost+found" --exclude INDEX.gz --exclude "events/mrmcd" --exclude "broadcast/c-radar" --del -rltzxaP chaosdarmstadt@${MASTER}:ftp/ /var/data2/ftp.ccc.de/ 
 
-rsync -e 'ssh -4 -i /root/.ssh/media.ccc.key.id_rsa -p 2222' --exclude ".*" --exclude "lost+found" --exclude INDEX.gz --exclude "events/mrmcd" --exclude "broadcast/c-radar" --exclude "NEW" --exclude "INDEX" --exclude "TREE" --del -rltzxaP darm-sync@${MASTER}:/srv/ftp/ /var/data2/ftp.ccc.de/
+
+#Mirror FTP-Master, exclude our own paths (mrmcd, c-radar)
+# exclude also files computed locally, like INDEX, INDEX.gz and TREE. NEW is sync from ftpmaster
+
+rsync -e 'ssh -4 -i /root/.ssh/media.ccc.key.id_rsa -p 2222' --exclude ".*" --exclude "lost+found" --exclude INDEX.gz --exclude "events/mrmcd" --exclude "broadcast/c-radar" --exclude "INDEX.gz" --exclude "INDEX" --exclude "TREE" --del -rltzxaP darm-sync@${MASTER}:/srv/ftp/ /var/data2/ftp.ccc.de/
+
+
+# Create Tree, INDEX, INDEX.gz and NEW
+# Update: We sync NEW from ftpmaster
 
 cd /var/data2/ftp.ccc.de/
 tree --noreport > TREE
 find ./ -type f | sed "s/.\///" | sort > INDEX
-diff /var/tmp/ftp_INDEX  /var/data2/ftp.ccc.de/INDEX -U 0 | grep -Ev '^[+]{3,3}' | grep -Ev '^[-]{3,3}' | grep -Ev '^@@' > NEW
-
-
+#diff /var/tmp/ftp_INDEX  /var/data2/ftp.ccc.de/INDEX -U 0 | grep -Ev '^[+]{3,3}' | grep -Ev '^[-]{3,3}' | grep -Ev '^@@' > NEW
+#gzip -1 -c INDEX > INDEX.gz
+find . -type f \! -name .\* -printf "%T@ %s %p\n" | grep -v "./INDEX.gz" | sort -n | gzip -1 > INDEX.gz
 echo "Successfull FTP Sync" | logger -t "ftpsync"
 
+if [ -z "$VERBOSE" ]; then
+	echo "FTP Run done, fixing permissions"
+fi
+
 #fix file permissions
+
+echo "Fixing file permissions" | logger -t "ftpsync"
+
 
 chown ${FTPUSER}:${FTPGROUP}  -R /var/data2/ftp.ccc.de/
 chmod -R o+rX /var/data2/ftp.ccc.de/
@@ -92,6 +117,7 @@ chown :c-radar -R /var/data2/ftp.ccc.de/broadcast/c-radar
 chmod -R g+rwX /var/data2/ftp.ccc.de/broadcast/c-radar
 chmod -R o+rX /var/data2/ftp.ccc.de/broadcast/c-radar
 
+echo "FTP Sync done, removing lockfile" | logger -t "ftpsync"
 
 
 # cleanup
