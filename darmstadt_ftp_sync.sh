@@ -1,32 +1,34 @@
 #!/bin/bash
 # Description: Upload our stuff to master, then sync back changes from master.
-# Stops working after the first error, unless using -c
+# Uses a lockfile so only one instance can run.
+# In case of an error, run with -f to clean up
+# Run with -v to get verbose output to stdout
+# By default stuff gets written to syslog
 
-# the account to send our files to the ftp master via sftp is chaosdarmstadt, defined in UPLOADACCOUNT
-# the account to receive changes via rsync is darmstadt, defined in the RSYNCMASTER variable
-
-
-# this scripts need rsync, lftp (with an sftp-module) and tree installed
-# the user who runs this script need the following in its ~/.lftp/rc:
-#     set sftp:connect-program "ssh -a -x -i PATH-TO-SSH-KEY"
-#     this will tell lftp where the keyfile for sftp login is located
-
-
+#Change so it points to your local rsync
 rsync=/usr/bin/rsync
+#Lock file to make sure we only run one instance at a time. Needed for initial / long syncs or slow links
 LOCK_FILE=/var/tmp/rsync-media.lock
+
+#The master node to sync with
 MASTER=upload.media.ccc.de
 
-#TARGET has to end with a slash!
+#TARGET has to end with a slash! Change it to suit you local installation
 TARGET=/mnt/ftp/ftp.ccc.de/
+#Your local user/group for file permissions
 FTPUSER=web012
 FTPGROUP=web012
 
 
-
+# the account to send our files to the ftp master via sftp is defined in UPLOADACCOUNT
+# the account to receive changes via rsync is defined in the RSYNCMASTER variable
 RSYNCMASTER=rsync://darmstadt@koeln.media.ccc.de/ftp
 RSYNCMASTERPWFILE=darmstadt_media_rsync_pw
 
 #TODO: check for target, whether it is actually a directory!
+
+### No changes needed below
+
 
 usage () {
   cat << EOF
