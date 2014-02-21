@@ -1,35 +1,36 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 # Description: Upload our stuff to master, then sync back changes from master.
 # Uses a lockfile so only one instance can run.
 # In case of an error, run with -f to clean up
 # Run with -v to get verbose output to stdout
 # By default stuff gets written to syslog
 
-#Change so it points to your local rsync
-rsync=/usr/bin/rsync
-#Lock file to make sure we only run one instance at a time. Needed for initial / long syncs or slow links
-LOCK_FILE=/var/tmp/rsync-media.lock
-
-#The master node to sync with
-MASTER=upload.media.ccc.de
-
-#TARGET has to end with a slash! Change it to suit you local installation
-TARGET=/mnt/ftp/ftp.ccc.de/
-#Your local user/group for file permissions
-FTPUSER=web012
-FTPGROUP=web012
 
 
-# the account to send our files to the ftp master via sftp is defined in UPLOADACCOUNT
-# the account to receive changes via rsync is defined in the RSYNCMASTER variable
-RSYNCMASTER=rsync://darmstadt@koeln.media.ccc.de/ftp
-RSYNCMASTERPWFILE=darmstadt_media_rsync_pw
+#### 
+# Make sure the script exits on unset variables and on error 
+set -o nounset
+set -e
 
-#TODO: check for target, whether it is actually a directory!
+
+# change the default config name to your local configuration
+configfile=/path/to/your/default.config
 
 ### No changes needed below
 
+# Load config
+if [ ! -f "${configfile}" ]
+then
+    echo "No config at ${configfile} found"
+    exit 1
+fi
+source ${configfile}
 
+
+#TODO: check for target, whether it is actually a directory!
+
+#display usage
 usage () {
   cat << EOF
   usage: $0 [-f][-v]
@@ -40,7 +41,7 @@ EOF
 }
 
 
-
+# parse the arguments
 while getopts "fvh" opt; do
   case "$opt" in 
     v) VERBOSE=1;;
@@ -65,7 +66,7 @@ if [ -f "$LOCK_FILE" ]; then
   /usr/bin/logger -t "$(basename $0)[$$]" "Lock file '${LOCK_FILE}' exists. Please check if another rsync is running. Test sync: 'sudo -u media-sync $0 -fv'"
   echo "${LOCK_FILE}' exists. Please check if another rsync is running."
   if test `find "$LOCK_FILE" -mmin +120`; then
-	echo "ftp lock is older than 120 minutes. please check" | mail -s "potential ftp error" bios@darmstadt.ccc.de
+	echo "ftp lock is older than 120 minutes. please check" | mail -s "potential ftp error" ${CONTACTEMAIL}
   fi
   exit
 fi
