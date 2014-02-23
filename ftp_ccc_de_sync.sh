@@ -95,14 +95,9 @@ echo "mrmcd FTP Sync" | logger -t "ftpsync"
 
 lftp -u chaosdarmstadt,test -p 2222 sftp://upload.media.ccc.de -e "mirror -Rc --delete ${TARGET}events/mrmcd/ ftp/events/mrmcd/; exit"
 
-#Backup des alten TREEs
-cp ${TARGET}TREE /var/tmp/ftp_INDEX
-# und download des mirrorcontents
 
 #Mirror FTP-Master, exclude our own paths (mrmcd, c-radar)
 # exclude also files computed locally, like INDEX, INDEX.gz and TREE. NEW is sync from ftpmaster
-
-#alt: rsync mit ssh rsync -e 'ssh -4 -i /root/.ssh/media.ccc.key.id_rsa -p 2222' --exclude ".*" --exclude "lost+found" --exclude INDEX.gz --exclude "events/mrmcd" --exclude "broadcast/c-radar" --exclude "INDEX.gz" --exclude "INDEX" --exclude "TREE" --del -rltzxaP ${RSYNCMASTER} ${TARGET}
 
 RSYNCVERBOSE=""
 
@@ -114,14 +109,12 @@ fi
 rsync ${RSYNCVERBOSE} --password-file=${RSYNCMASTERPWFILE} --exclude ".*" --exclude "lost+found" --exclude INDEX.gz --exclude "events/mrmcd" --exclude "broadcast/c-radar" --exclude "INDEX.gz" --exclude "INDEX" --exclude "TREE" -rltzxa --partial ${RSYNCMASTER} ${TARGET}
 ## TODO: readd del
 
-# Create Tree, INDEX, INDEX.gz and NEW
-# Update: We sync NEW from ftpmaster
+# Create Tree, INDEX, INDEX.gz 
+# NEW is synced from upstream
 
 cd ${TARGET}
 tree --noreport > TREE
 find ./ -type f | sed "s/.\///" | sort > INDEX
-#diff /var/tmp/ftp_INDEX  ${TARGET}INDEX -U 0 | grep -Ev '^[+]{3,3}' | grep -Ev '^[-]{3,3}' | grep -Ev '^@@' > NEW
-#gzip -1 -c INDEX > INDEX.gz
 find . -type f \! -name .\* -printf "%T@ %s %p\n" | grep -v "./INDEX.gz" | sort -n | gzip -1 > INDEX.gz
 echo "Successfull FTP Sync" | logger -t "ftpsync"
 
