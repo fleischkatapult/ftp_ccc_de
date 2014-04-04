@@ -28,7 +28,6 @@ fi
 source ${configfile}
 
 
-#TODO: check for target, whether it is actually a directory!
 
 #display usage
 usage () {
@@ -40,6 +39,7 @@ EOF
   exit
 }
 
+VERBOSE=0
 
 # parse the arguments
 while getopts "fvh" opt; do
@@ -53,27 +53,35 @@ done
 
 # CRON: silent unless VERBOSE
 
-#if verbose not set, mail!
-if [ -z "$VERBOSE" ]; then
+#if verbose is set to 0, give no output
+if [  "$VERBOSE" -eq "0" ]; then
   MAILTO=""
   exec >/dev/null 2>&1
 fi
 
+#check for target, whether it is actually a directory!
+
+if [ ! -d "$TARGET" ]; then
+    echo "The TARGET directory ${TARGET} does not exists. Please check your config"
+    exit 1
+fi
 
 #check for the lockfile
 if [ -f "$LOCK_FILE" ]; then
   
   /usr/bin/logger -t "$(basename $0)[$$]" "Lock file '${LOCK_FILE}' exists. Please check if another rsync is running. Test sync: 'sudo -u media-sync $0 -fv'"
-  echo "${LOCK_FILE}' exists. Please check if another rsync is running."
+  echo "${LOCK_FILE} exists. Please check if another rsync is running."
   if test `find "$LOCK_FILE" -mmin +120`; then
 	echo "ftp lock is older than 120 minutes. please check" | mail -s "potential ftp error" ${CONTACTEMAIL}
   fi
-  exit
+  exit 1
 fi
 
 
 # start sync
-echo "create lock file"
+if [ "$VERBOSE" -eq "1" ]; then
+    echo "create lock file"
+fi
 touch "$LOCK_FILE"
 
 
@@ -118,7 +126,7 @@ find ./ -type f | sed "s/.\///" | sort > INDEX
 find . -type f \! -name .\* -printf "%T@ %s %p\n" | grep -v "./INDEX.gz" | sort -n | gzip -1 > INDEX.gz
 echo "Successfull FTP Sync" | logger -t "ftpsync"
 
-if [ -z "$VERBOSE" ]; then
+if [ "$VERBOSE" -eq "1" ]; then
 	echo "FTP Run done, fixing permissions"
 fi
 
@@ -130,6 +138,7 @@ echo "Fixing file permissions" | logger -t "ftpsync"
 chown ${FTPUSER}:${FTPGROUP}  -R ${TARGET}
 chmod -R o+rX ${TARGET}
 chmod -R g+rX ${TARGET}
+#Chown for upload from local users in the local group c-radar
 chown :c-radar -R ${TARGET}broadcast/c-radar
 chmod -R g+rwX ${TARGET}broadcast/c-radar
 chmod -R o+rX ${TARGET}broadcast/c-radar
@@ -138,6 +147,8 @@ echo "FTP Sync done, removing lockfile" | logger -t "ftpsync"
 
 
 # cleanup
-echo "remove lock file"
+if [ "$VERBOSE" -eq "1" ]; then
+ echo "remove lock file"
+fi
 rm -f "$LOCK_FILE"
 
