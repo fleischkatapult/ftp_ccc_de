@@ -114,8 +114,7 @@ if [ -n "$VERBOSE" ]; then
     RSYNCVERBOSE="--progress -v"
 fi
 
-rsync ${RSYNCVERBOSE} --password-file=${RSYNCMASTERPWFILE} --exclude ".*" --exclude "lost+found" --exclude INDEX.gz --exclude "events/mrmcd" --exclude "broadcast/c-radar" --exclude "INDEX.gz" --exclude "INDEX" --exclude "TREE" -rltzxa --partial ${RSYNCMASTER} ${TARGET}
-## TODO: readd del
+rsync ${RSYNCVERBOSE} --password-file=${RSYNCMASTERPWFILE} --del --exclude ".*" --exclude "lost+found" --exclude INDEX.gz --exclude "events/mrmcd" --exclude "broadcast/c-radar" --exclude "INDEX.gz" --exclude "INDEX" --exclude "TREE" -rltzxa --partial ${RSYNCMASTER} ${TARGET}
 
 # Create Tree, INDEX, INDEX.gz 
 # NEW is synced from upstream
